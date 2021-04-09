@@ -26,9 +26,14 @@ list.result <- lapply(names.study, function(x){
 names(list.result) <- names.study
 
 
+
+
 ## ID info
 list.idinfo <- lapply(c("exposure_of_interest.csv", "outcome_of_interest.csv", "cohort_method_analysis.csv"), function(x){
   info.id <- fread(file.path("res", names.study[1], x))[, 1:2]
+  if (grepl("exposure", x)){
+    info.id <- info.id[exposure_id %in% c(9991, sort(lapply(list.result, function(x){unique(x$comparator_id)}) %>% Reduce(intersect, .)))]
+  }
   vec.id <- info.id[[1]]
   names(vec.id) <- info.id[[2]]
   return(vec.id)
@@ -38,4 +43,6 @@ names(list.idinfo) <- c("exposure", "outcome", "analysis")
 
 analysis.originalN <- c(1, 1, 1, 1, 15, 15, 15, 15, 37, 39, 37, 39, 37, 39, 37, 39, rep(39, 5))
 names(analysis.originalN) <- sort(lapply(list.result, function(x){unique(x$analysis_id)}) %>% Reduce(intersect, .))
+
+
 
