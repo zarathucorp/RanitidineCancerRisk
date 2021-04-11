@@ -90,18 +90,21 @@ server <- function(input, output, session) {
   
   output$table1 <- renderDT({
     out.tb1 <- NULL
+    fname <- paste0(names(which(list.idinfo$exposure == input$target_tb1)), "_", names(which(list.idinfo$exposure == input$comparator_tb1)), "_",
+                    names(which(list.idinfo$outcome == input$outcome_tb1)), "_", names(which(list.idinfo$analysis == input$analysis_tb1)))
     if (input$analysis_tb1 %in% unique(analysis.originalN)) return(NULL)
     
     names.tc <- c(names(which(list.idinfo$exposure == input$target_tb1)), names(which(list.idinfo$exposure == input$comparator_tb1)))
     if (input$database_tb1 == "All"){
       out.tb1 <- prepareTable1(balance = tb1.aggre())[-c(1:2), ]
       colnames(out.tb1) <- c("", paste0(names.tc, "(n = ", colSums(nn.original()),")"), "Standardized difference", paste0(names.tc, "(n = ", colSums(nn()),")"), "Standardized difference")
-      
+      fname <- paste0("tb1_All_", fname)
     } else{
       out.tb1 <- prepareTable1(balance = getbalance()[databaseId == input$database_tb1])[-c(1:2), ]
       colnames(out.tb1) <- c("", paste0(names.tc, "(n = ", colSums(nn.original()[which(names.study == input$database_tb1)]),")"), "Standardized difference", paste0(names.tc, "(n = ", colSums(nn()[which(names.study == input$database_tb1)]),")"), "Standardized difference")
+      fname <- paste0("tb1_", input$database_tb1, "_", fname)
     }
-    fname <- "Table1"
+    
     datatable(out.tb1, rownames = F, extensions = 'Buttons', 
               options = c(list(dom = 'tB', pageLength = -1,
                                buttons = list('copy', 
@@ -186,7 +189,9 @@ server <- function(input, output, session) {
   
   output$downloadButton_forest <- downloadHandler(
     filename =  function() {
-      paste("forestplot.", input$forest_file_ext ,sep="")
+      fname <- paste0("forestplot_", names(which(list.idinfo$exposure == input$target_tb1)), "_", names(which(list.idinfo$exposure == input$comparator_tb1)), "_",
+                      names(which(list.idinfo$outcome == input$outcome_tb1)), "_", names(which(list.idinfo$analysis == input$analysis_tb1)), ".", input$forest_file_ext)
+
     },
     # content is a function with argument file. content writes the plot to the device
     content = function(file) {
