@@ -22,8 +22,12 @@ list.result <- lapply(names.study, function(x){
   fread(file.path("res",x, "cohort_method_result.csv"), integer64 = "numeric")
 })
 
+list.interaction <- lapply(names.study, function(x){
+  fread(file.path("res",x, "cm_interaction_result.csv"), integer64 = "numeric")
+})
 
-names(list.result) <- names.study
+
+names(list.interaction) <- names(list.result) <- names.study
 
 
 

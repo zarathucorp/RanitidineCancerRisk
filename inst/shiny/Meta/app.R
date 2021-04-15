@@ -16,7 +16,8 @@ ui <- navbarPage("Ranitidine",
                               tabsetPanel(type = "pills",
                                           tabPanel("Table 1", radioButtons("database_tb1", "Database", c("All", names.study), "All", inline = T),
                                                    withLoader(DTOutput("table1"), type="html", loader="loader6")),
-                                          tabPanel("Meta analysis", 
+                                          tabPanel("Meta analysis",
+                                                   selectInput("database_meta", "Database", names.study, names.study, multiple = T),
                                                    withLoader(plotOutput("meta", width = "100%"), type="html", loader="loader6"),
                                                    h3("Download options"),
                                                    wellPanel(
@@ -39,7 +40,7 @@ server <- function(input, output, session) {
   ## getBalance
   getbalance <- reactive({
     getBalance_csv(list.balance = data.balance, list.covariate = data.covariate,  
-                               targetId = 9991, comparatorId = 9998, analysisId = 4, outcomeId = 1)
+                               targetId = as.numeric(input$target_tb1), comparatorId = as.numeric(input$comparator_tb1), analysisId = as.numeric(input$analysis_tb1), outcomeId = as.numeric(input$outcome_tb1))
     })%>% bindCache(input$target_tb1, input$comparator_tb1, input$input$analysis_tb1, input$outcome_tb1)
   
   
@@ -132,9 +133,15 @@ server <- function(input, output, session) {
   
   
   obj.meta <- reactive({
-    DM <- lapply(list.result, function(x){x[target_id == as.numeric(input$target_tb1) & comparator_id == as.numeric(input$comparator_tb1) & analysis_id == as.numeric(input$analysis_tb1) & outcome_id == as.numeric(input$outcome_tb1)]}) %>% rbindlist
-  
+    DM <- lapply(list.result[input$database_meta], function(x){x[target_id == as.numeric(input$target_tb1) & comparator_id == as.numeric(input$comparator_tb1) & analysis_id == as.numeric(input$analysis_tb1) & outcome_id == as.numeric(input$outcome_tb1)]}) %>% rbindlist
     out.meta <- metagen(TE = DM$log_rr, seTE = DM$se_log_rr, studlab = DM$database_id, sm = "HR", hakn = F, comb.fixed = TRUE,comb.random = TRUE)
+    if (grepl("interaction", names(list.idinfo$analysis)[as.numeric(input$analysis_tb1)])){
+      DM <- lapply(list.interaction[input$database_meta], function(x){x[target_id == as.numeric(input$target_tb1) & comparator_id == as.numeric(input$comparator_tb1) & analysis_id == as.numeric(input$analysis_tb1) & outcome_id == as.numeric(input$outcome_tb1)]}) %>% rbindlist
+      out.meta <- metagen(TE = DM$log_rrr, seTE = DM$se_log_rrr, studlab = DM$database_id, sm = "HR", hakn = F, comb.fixed = TRUE,comb.random = TRUE)
+    }
+    
+  
+    
     out.meta$n.e <- DM$target_subjects
     out.meta$event.e <- DM$target_outcomes
     out.meta$event.rate.t <- round(with(DM, target_outcomes/(target_days/365))*1000,1)
@@ -162,7 +169,7 @@ server <- function(input, output, session) {
            fontsize=12, comb.fixed = FALSE, comb.random = TRUE, text.random = "Overall", col.diamond.random = "royalblue", col.diamond.lines = "black",
            digits = 2, digits.pval =3, digits.I2 = 1, just.studlab="left", just.addcols.left= "right", just = "center", xlim = c(round(1/xlim(), 2),xlim()),
            plotwidth ="8cm", spacing =1, addrow.overall=TRUE, print.I2 = TRUE, print.pval.I2=F, print.tau2 = F, print.pval.Q = F,
-           label.left = paste0("Flavor\n", obj.meta()$vname[1]), label.right = paste0("Flavor\n", obj.meta()$vname[2]), scientific.pval = F, big.mark =","
+           label.left = paste0("Favor\n", obj.meta()$vname[1]), label.right = paste0("Favor\n", obj.meta()$vname[2]), scientific.pval = F, big.mark =","
            )
   })
   
@@ -210,7 +217,7 @@ server <- function(input, output, session) {
                               fontsize=12, comb.fixed = FALSE, comb.random = TRUE, text.random = "Overall", col.diamond.random = "royalblue", col.diamond.lines = "black",
                               digits = 2, digits.pval =3, digits.I2 = 1, just.studlab="left", just.addcols.left= "right", just = "center", xlim = c(round(1/xlim(), 2),xlim()),
                               plotwidth ="8cm", spacing =1, addrow.overall=TRUE, print.I2 = TRUE, print.pval.I2=F, print.tau2 = F, print.pval.Q = F,
-                              label.left = paste0("Flavor\n", obj.meta()$vname[1]), label.right = paste0("Flavor\n", obj.meta()$vname[2]), scientific.pval = F, big.mark =","
+                              label.left = paste0("Favor\n", obj.meta()$vname[1]), label.right = paste0("Favor\n", obj.meta()$vname[2]), scientific.pval = F, big.mark =","
                        )
                        dev.off()
                        
@@ -222,7 +229,7 @@ server <- function(input, output, session) {
                               fontsize=12, comb.fixed = FALSE, comb.random = TRUE, text.random = "Overall", col.diamond.random = "royalblue", col.diamond.lines = "black",
                               digits = 2, digits.pval =3, digits.I2 = 1, just.studlab="left", just.addcols.left= "right", just = "center", xlim = c(round(1/xlim(), 2),xlim()),
                               plotwidth ="8cm", spacing =1, addrow.overall=TRUE, print.I2 = TRUE, print.pval.I2=F, print.tau2 = F, print.pval.Q = F,
-                              label.left = paste0("Flavor\n", obj.meta()$vname[1]), label.right = paste0("Flavor\n", obj.meta()$vname[2]), scientific.pval = F, big.mark =","
+                              label.left = paste0("Favor\n", obj.meta()$vname[1]), label.right = paste0("Favor\n", obj.meta()$vname[2]), scientific.pval = F, big.mark =","
                        )
                        dev.off()
                      } else if (input$forest_file_ext == "tiff"){
@@ -233,7 +240,7 @@ server <- function(input, output, session) {
                               fontsize=12, comb.fixed = FALSE, comb.random = TRUE, text.random = "Overall", col.diamond.random = "royalblue", col.diamond.lines = "black",
                               digits = 2, digits.pval =3, digits.I2 = 1, just.studlab="left", just.addcols.left= "right", just = "center", xlim = c(round(1/xlim(), 2),xlim()),
                               plotwidth ="8cm", spacing =1, addrow.overall=TRUE, print.I2 = TRUE, print.pval.I2=F, print.tau2 = F, print.pval.Q = F,
-                              label.left = paste0("Flavor\n", obj.meta()$vname[1]), label.right = paste0("Flavor\n", obj.meta()$vname[2]), scientific.pval = F, big.mark =","
+                              label.left = paste0("Favor\n", obj.meta()$vname[1]), label.right = paste0("Favor\n", obj.meta()$vname[2]), scientific.pval = F, big.mark =","
                        )
                        dev.off()
                        
@@ -245,7 +252,7 @@ server <- function(input, output, session) {
                               fontsize=12, comb.fixed = FALSE, comb.random = TRUE, text.random = "Overall", col.diamond.random = "royalblue", col.diamond.lines = "black",
                               digits = 2, digits.pval =3, digits.I2 = 1, just.studlab="left", just.addcols.left= "right", just = "center", xlim = c(round(1/xlim(), 2),xlim()),
                               plotwidth ="8cm", spacing =1, addrow.overall=TRUE, print.I2 = TRUE, print.pval.I2=F, print.tau2 = F, print.pval.Q = F,
-                              label.left = paste0("Flavor\n", obj.meta()$vname[1]), label.right = paste0("Flavor\n", obj.meta()$vname[2]), scientific.pval = F, big.mark =","
+                              label.left = paste0("Favor\n", obj.meta()$vname[1]), label.right = paste0("Favor\n", obj.meta()$vname[2]), scientific.pval = F, big.mark =","
                        )
                        dev.off()
                        
@@ -257,7 +264,7 @@ server <- function(input, output, session) {
                               fontsize=12, comb.fixed = FALSE, comb.random = TRUE, text.random = "Overall", col.diamond.random = "royalblue", col.diamond.lines = "black",
                               digits = 2, digits.pval =3, digits.I2 = 1, just.studlab="left", just.addcols.left= "right", just = "center", xlim = c(round(1/xlim(), 2),xlim()),
                               plotwidth ="8cm", spacing =1, addrow.overall=TRUE, print.I2 = TRUE, print.pval.I2=F, print.tau2 = F, print.pval.Q = F,
-                              label.left = paste0("Flavor\n", obj.meta()$vname[1]), label.right = paste0("Flavor\n", obj.meta()$vname[2]), scientific.pval = F, big.mark =","
+                              label.left = paste0("Favor\n", obj.meta()$vname[1]), label.right = paste0("Favor\n", obj.meta()$vname[2]), scientific.pval = F, big.mark =","
                        )
                        dev.off()
                        
