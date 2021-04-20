@@ -202,10 +202,10 @@ server <- function(input, output, session) {
   
   
   obj.meta <- reactive({
-    DM <- data.result[database_id == input$database_meta & target_id == as.numeric(input$target_tb1) & comparator_id == as.numeric(input$comparator_tb1) & analysis_id == as.numeric(input$analysis_tb1) & outcome_id == as.numeric(input$outcome_tb1)]
+    DM <- data.result[database_id %in% input$database_meta & target_id == as.numeric(input$target_tb1) & comparator_id == as.numeric(input$comparator_tb1) & analysis_id == as.numeric(input$analysis_tb1) & outcome_id == as.numeric(input$outcome_tb1)]
     out.meta <- metagen(TE = DM$log_rr, seTE = DM$se_log_rr, studlab = DM$database_id, sm = "HR", hakn = F, comb.fixed = TRUE,comb.random = TRUE)
     if (grepl("interaction", names(list.idinfo$analysis)[as.numeric(input$analysis_tb1)])){
-      DM <- data.interaction[database_id == input$database_meta & target_id == as.numeric(input$target_tb1) & comparator_id == as.numeric(input$comparator_tb1) & analysis_id == as.numeric(input$analysis_tb1) & outcome_id == as.numeric(input$outcome_tb1)]
+      DM <- data.interaction[database_id %in% input$database_meta & target_id == as.numeric(input$target_tb1) & comparator_id == as.numeric(input$comparator_tb1) & analysis_id == as.numeric(input$analysis_tb1) & outcome_id == as.numeric(input$outcome_tb1)]
       out.meta <- metagen(TE = DM$log_rrr, seTE = DM$se_log_rrr, studlab = DM$database_id, sm = "HR", hakn = F, comb.fixed = TRUE,comb.random = TRUE)
     }
     
