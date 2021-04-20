@@ -54,7 +54,7 @@ ui <- navbarPage("Ranitidine",
                                                                                                          two groups were more similar in terms of their predicted probability of receiving one treatment over the other."),
                                                    fluidRow(
                                                      column(6, sliderInput("width_ps","Plot width", min = 2, max = 20, value = 5)),
-                                                     column(6, sliderInput("height_ps","Plot height", min = 2, max = 15, value = 3.5))
+                                                     column(6, sliderInput("height_ps","Plot height", min = 2, max = 15, value = 3.5, step = 0.5))
                                                    ),
                                                    div(style = "display: inline-block;vertical-align:top;",
                                                        downloadButton("downloadPsDistPlotPng", label = "Download plot as PNG"),
@@ -73,6 +73,28 @@ ui <- navbarPage("Ranitidine",
                                                    div(style = "display: inline-block;vertical-align:top;",
                                                        downloadButton("downloadBalancePlotPng", label = "Download plot as PNG"),
                                                        downloadButton("downloadBalancePlotEmf", label = "Download plot as EMF")
+                                                   )),
+                                          tabPanel("Power",
+                                                   radioButtons("database_power", "Database", names.study, names.study[1], inline = T),
+                                                   uiOutput("powerTableCaption"),
+                                                   tableOutput("powerTable"),
+                                                   uiOutput("timeAtRiskTableCaption"),
+                                                   tableOutput("timeAtRiskTable")
+                                          ),
+                                          tabPanel("Systematic error",
+                                                   radioButtons("database_sys", "Database", names.study, names.study[1], inline = T),
+                                                   plotOutput("systematicErrorPlot"),
+                                                   div(strong("Figure 4."),"Systematic error. Effect size estimates for the negative controls (true hazard ratio = 1)
+                                                                                    and positive controls (true hazard ratio > 1), before and after calibration. Estimates below the diagonal dashed
+                                                                                    lines are statistically significant (alpha = 0.05) different from the true effect size. A well-calibrated
+                                                                                    estimator should have the true effect size within the 95 percent confidence interval 95 percent of times."),
+                                                   fluidRow(
+                                                     column(6, sliderInput("width_sys","Plot width", min = 2, max = 20, value = 12)),
+                                                     column(6, sliderInput("height_sys","Plot height", min = 2, max = 15, value = 5.5, step = 0.5))
+                                                   ),
+                                                   div(style = "display: inline-block;vertical-align:top;",
+                                                       downloadButton("downloadSystematicErrorPlotPng", label = "Download plot as PNG"),
+                                                       downloadButton("downloadSystematicErrorPlotEmf", label = "Download plot as EMF")
                                                    ))
                               )
                               
@@ -97,15 +119,12 @@ server <- function(input, output, session) {
 
   ## N info
   nn <- reactive({
-    lapply(list.result, function(x){
-    x[target_id == as.numeric(input$target_tb1) & comparator_id == as.numeric(input$comparator_tb1) & analysis_id == as.numeric(input$analysis_tb1) & outcome_id == as.numeric(input$outcome_tb1), c("target_subjects", "comparator_subjects")]
-  }) %>% Reduce(rbind, .)
+    data.result[target_id == as.numeric(input$target_tb1) & comparator_id == as.numeric(input$comparator_tb1) & analysis_id == as.numeric(input$analysis_tb1) & outcome_id == as.numeric(input$outcome_tb1), c("target_subjects", "comparator_subjects")]
   })
   
   nn.original <- reactive({
-    lapply(list.result, function(x){
-      x[target_id == as.numeric(input$target_tb1) & comparator_id == as.numeric(input$comparator_tb1) & analysis_id == analysis.originalN[as.character(input$analysis_tb1)] & outcome_id == as.numeric(input$outcome_tb1), c("target_subjects", "comparator_subjects")]
-    }) %>% Reduce(rbind, .)
+    data.result[target_id == as.numeric(input$target_tb1) & comparator_id == as.numeric(input$comparator_tb1) & analysis_id == analysis.originalN[as.character(input$analysis_tb1)] & outcome_id == as.numeric(input$outcome_tb1), c("target_subjects", "comparator_subjects")]
+    
   })
   
   ## aggregate table 1
@@ -183,10 +202,10 @@ server <- function(input, output, session) {
   
   
   obj.meta <- reactive({
-    DM <- lapply(list.result[input$database_meta], function(x){x[target_id == as.numeric(input$target_tb1) & comparator_id == as.numeric(input$comparator_tb1) & analysis_id == as.numeric(input$analysis_tb1) & outcome_id == as.numeric(input$outcome_tb1)]}) %>% rbindlist
+    DM <- data.result[database_id == input$database_meta & target_id == as.numeric(input$target_tb1) & comparator_id == as.numeric(input$comparator_tb1) & analysis_id == as.numeric(input$analysis_tb1) & outcome_id == as.numeric(input$outcome_tb1)]
     out.meta <- metagen(TE = DM$log_rr, seTE = DM$se_log_rr, studlab = DM$database_id, sm = "HR", hakn = F, comb.fixed = TRUE,comb.random = TRUE)
     if (grepl("interaction", names(list.idinfo$analysis)[as.numeric(input$analysis_tb1)])){
-      DM <- lapply(list.interaction[input$database_meta], function(x){x[target_id == as.numeric(input$target_tb1) & comparator_id == as.numeric(input$comparator_tb1) & analysis_id == as.numeric(input$analysis_tb1) & outcome_id == as.numeric(input$outcome_tb1)]}) %>% rbindlist
+      DM <- data.interaction[database_id == input$database_meta & target_id == as.numeric(input$target_tb1) & comparator_id == as.numeric(input$comparator_tb1) & analysis_id == as.numeric(input$analysis_tb1) & outcome_id == as.numeric(input$outcome_tb1)]
       out.meta <- metagen(TE = DM$log_rrr, seTE = DM$se_log_rrr, studlab = DM$database_id, sm = "HR", hakn = F, comb.fixed = TRUE,comb.random = TRUE)
     }
     
@@ -472,6 +491,87 @@ server <- function(input, output, session) {
       )
     )
   })
+  
+  
+  output$powerTableCaption <- renderUI({
+    text <- "<strong>Table 1a.</strong> Number of subjects, follow-up time (in years), number of outcome
+      events, and event incidence rate (IR) per 1,000 patient years (PY) in the target (<em>%s</em>) and
+      comparator (<em>%s</em>) group after propensity score adjustment, as  well as the minimum detectable  relative risk (MDRR).
+      Note that the IR does not account for any stratification."
+    return(HTML(sprintf(text, names(which(list.idinfo$exposure == input$target_tb1)), names(which(list.idinfo$exposure == input$comparator_tb1)))))
+  })
+  
+  
+  ## Power
+  output$powerTable <- renderTable({
+    res <- data.result[database_id == input$database_power & target_id == as.numeric(input$target_tb1) & comparator_id == as.numeric(input$comparator_tb1) & analysis_id == as.numeric(input$analysis_tb1) & outcome_id == as.numeric(input$outcome_tb1)]
+    
+    table <- preparePowerTable(res)
+    table$description <- NULL
+    colnames(table) <- c("Target subjects",
+                         "Comparator subjects",
+                         "Target years",
+                         "Comparator years",
+                         "Target events",
+                         "Comparator events",
+                         "Target IR (per 1,000 PY)",
+                         "Comparator IR (per 1,000 PY)",
+                         "MDRR")
+    return(table[, 1:9])
+  })
+  
+  output$timeAtRiskTableCaption <- renderUI({
+    text <- "<strong>Table 1b.</strong> Time (days) at risk distribution expressed as
+      minimum (min), 25th percentile (P25), median, 75th percentile (P75), and maximum (max) in the target
+     (<em>%s</em>) and comparator (<em>%s</em>) cohort after propensity score adjustment."
+    return(HTML(sprintf(text, names(which(list.idinfo$exposure == input$target_tb1)), names(which(list.idinfo$exposure == input$comparator_tb1)))))
+  })
+  
+  output$timeAtRiskTable <- renderTable({
+    followUpDist <- data.fudist[database_id == input$database_kap & target_id == as.numeric(input$target_tb1) & comparator_id == as.numeric(input$comparator_tb1) & analysis_id == as.numeric(input$analysis_tb1) & outcome_id == as.numeric(input$outcome_tb1)]
+    table <- prepareFollowUpDistTable(followUpDist)
+    return(table)
+  })
+  
+  ## Systematic error
+  
+  systematicErrorPlot <- reactive({
+    results <- data.result[database_id == input$database_sys & target_id == as.numeric(input$target_tb1) & comparator_id == as.numeric(input$comparator_tb1) & analysis_id == as.numeric(input$analysis_tb1)]
+    negativeControlOutcome <- data.negres[database_id == input$database_sys]
+    
+    results$effectSize <- NA
+    idx <- results$outcome_id %in% negativeControlOutcome$outcome_id
+    results$effectSize[idx] <- 1
+    #if (!is.null(positiveControlOutcome)) {
+    #  idx <- results$outcomeId %in% positiveControlOutcome$outcomeId
+    #  results$effectSize[idx] <- positiveControlOutcome$effectSize[match(results$outcomeId[idx],
+    #                                                                     positiveControlOutcome$outcomeId)]
+    #}
+    results <- results[!is.na(results$effectSize), ]
+    
+    plot <- plotScatter(results)
+    return(plot)
+  })
+  
+  output$systematicErrorPlot <- renderPlot({
+    return(systematicErrorPlot())
+  })
+  
+  output$downloadSystematicErrorPlotPng <- downloadHandler(filename = paste0("systematicerror", input$database_sys, "_", names(which(list.idinfo$exposure == input$target_tb1)), "_", names(which(list.idinfo$exposure == input$comparator_tb1)), "_",
+                                                                              names(which(list.idinfo$analysis == input$analysis_tb1)), ".png"), 
+                                                           contentType = "image/png", 
+                                                           content = function(file) {
+                                                             ggplot2::ggsave(file, plot = systematicErrorPlot(), width = input$width_sys, height = input$height_sys, dpi = 600)
+                                                           })
+  
+  output$downloadSystematicErrorPlotEmf <- downloadHandler(filename = paste0("systematicerror", input$database_sys, "_", names(which(list.idinfo$exposure == input$target_tb1)), "_", names(which(list.idinfo$exposure == input$comparator_tb1)), "_",
+                                                                              names(which(list.idinfo$analysis == input$analysis_tb1)), ".emf"), 
+                                                           contentType = "application/emf", 
+                                                           content = function(file) {
+                                                             devEMF::emf(file, width = input$width_sys, height = input$height_sys, emfPlus = F, coordDPI = 600)
+                                                             plot(systematicErrorPlot())
+                                                             dev.off()
+                                                           })
   
   session$onSessionEnded(function() {
     stopApp()
