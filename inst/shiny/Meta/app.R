@@ -23,6 +23,56 @@ ui <- navbarPage("Ranitidine",
                                                    wellPanel(
                                                      uiOutput("downloadControls_forest"),
                                                      downloadButton("downloadButton_forest", label = "Download the plot")
+                                                   )),
+                                          tabPanel("KM plot", 
+                                                   radioButtons("database_kap", "Database", names.study, names.study[1], inline = T),
+                                                   withLoader(plotOutput("kaplanMeierPlot"), type="html", loader="loader6"),
+                                                   uiOutput("kaplanMeierPlotPlotCaption"),
+                                                   fluidRow(
+                                                     column(4, checkboxInput("ci_km", "Show 95% CI", value = F)),
+                                                     column(4, checkboxInput("cumulative_km", "Show cumulative incidence", value = T)),
+                                                     column(4, checkboxInput("percent_km", "% Y-scale", value = F)),
+                                                     column(4, checkboxInput("yearx_km", "Year X-scale", value = F))
+                                                   ),
+                                                   fluidRow(
+                                                     column(6, uiOutput("x_km")),
+                                                     column(6, sliderInput("ymin_km", "Y axis range", min = 0, max = 1, value = c(0, 0.1), step = 0.05))
+                                                   ),
+                                                   fluidRow(
+                                                     column(6, sliderInput("width_km","Plot width", min = 5, max = 20, value = 10)),
+                                                     column(6, sliderInput("height_km","Plot height", min = 2, max = 15, value = 5))
+                                                   ),
+                                                   div(style = "display: inline-block;vertical-align:top;",
+                                                       downloadButton("downloadKaplanMeierPlotPng", label = "Download plot as PNG"),
+                                                       downloadButton("downloadKaplanMeierPlotEmf", label = "Download plot as EMF")
+                                                   )),
+                                          tabPanel("Propensity scores",
+                                                   radioButtons("database_ps", "Database", names.study, names.study[1], inline = T),
+                                                   plotOutput("psDistPlot"),
+                                                   div(strong("Figure 2."),"Preference score distribution. The preference score is a transformation of the propensity score
+                                                                                                         that adjusts for differences in the sizes of the two treatment groups. A higher overlap indicates subjects in the
+                                                                                                         two groups were more similar in terms of their predicted probability of receiving one treatment over the other."),
+                                                   fluidRow(
+                                                     column(6, sliderInput("width_ps","Plot width", min = 2, max = 20, value = 5)),
+                                                     column(6, sliderInput("height_ps","Plot height", min = 2, max = 15, value = 3.5))
+                                                   ),
+                                                   div(style = "display: inline-block;vertical-align:top;",
+                                                       downloadButton("downloadPsDistPlotPng", label = "Download plot as PNG"),
+                                                       downloadButton("downloadPsDistPlotEmf", label = "Download plot as EMF")
+                                                   )),
+                                          tabPanel("Covariate balance",
+                                                   radioButtons("database_bal", "Database", names.study, names.study[1], inline = T),
+                                                   uiOutput("hoverInfoBalanceScatter"),
+                                                   plotOutput("balancePlot",
+                                                              hover = hoverOpts("plotHoverBalanceScatter", delay = 100, delayType = "debounce")),
+                                                   uiOutput("balancePlotCaption"),
+                                                   fluidRow(
+                                                     column(6, sliderInput("width_bal","Plot width", min = 2, max = 20, value = 4)),
+                                                     column(6, sliderInput("height_bal","Plot height", min = 2, max = 15, value = 4))
+                                                   ),
+                                                   div(style = "display: inline-block;vertical-align:top;",
+                                                       downloadButton("downloadBalancePlotPng", label = "Download plot as PNG"),
+                                                       downloadButton("downloadBalancePlotEmf", label = "Download plot as EMF")
                                                    ))
                               )
                               
@@ -106,7 +156,7 @@ server <- function(input, output, session) {
       fname <- paste0("tb1_", input$database_tb1, "_", fname)
     }
     
-    datatable(out.tb1, rownames = F, extensions = 'Buttons', 
+    datatable(out.tb1, rownames = F, extensions = 'Buttons', class="compact",
               options = c(list(dom = 'tB', pageLength = -1,
                                buttons = list('copy', 
                                               'print', 
@@ -275,12 +325,157 @@ server <- function(input, output, session) {
       
     })
   
+  ## KM
+  
+  getkm <- reactive({
+    km <- data.km[database_id == input$database_kap & target_id == as.numeric(input$target_tb1) & comparator_id == as.numeric(input$comparator_tb1) & analysis_id == as.numeric(input$analysis_tb1) & outcome_id == as.numeric(input$outcome_tb1)]
+    return(km)
+  })
+  
+  
+  output$x_km <- renderUI({
+    sliderInput("xmax_km", "X axis range", min = 0, max = max(getkm()$time), value = c(0, max(getkm()$time)), step = 5)
+    
+  })
+  
+  kaplanMeierPlot <- reactive({
+    km <- getkm()
+    plot <- plotKaplanMeier(kaplanMeier = subset(km, time >= input$xmax_km[1] & time <= input$xmax_km[2]),
+                            targetName = names(which(list.idinfo$exposure == input$target_tb1)),
+                            comparatorName = names(which(list.idinfo$exposure == input$comparator_tb1)), ymin = input$ymin_km, ci = input$ci_km, cum_inc = input$cumulative_km, percent = input$percent_km, year = input$yearx_km)
+    return(plot)
+  })
+  
+  output$kaplanMeierPlot <- renderPlot({
+    return(kaplanMeierPlot())
+  }, res = 100)
+  
+  
+  output$downloadKaplanMeierPlotPng <- downloadHandler(filename = paste0("km_", input$database_kap, "_", names(which(list.idinfo$exposure == input$target_tb1)), "_", names(which(list.idinfo$exposure == input$comparator_tb1)), "_",
+                                                                         names(which(list.idinfo$outcome == input$outcome_tb1)), "_", names(which(list.idinfo$analysis == input$analysis_tb1)), ".png"), 
+                                                       contentType = "image/png", 
+                                                       content = function(file) {
+                                                         ggplot2::ggsave(file, plot = kaplanMeierPlot(), width = input$width_km, height = input$height_km, dpi = 600)
+                                                       })
+  
+  output$downloadKaplanMeierPlotEmf <- downloadHandler(filename = paste0("km_", input$database_kap, "_", names(which(list.idinfo$exposure == input$target_tb1)), "_", names(which(list.idinfo$exposure == input$comparator_tb1)), "_",
+                                                                         names(which(list.idinfo$outcome == input$outcome_tb1)), "_", names(which(list.idinfo$analysis == input$analysis_tb1)), ".emf"), 
+                                                       contentType = "application/emf", 
+                                                       content = function(file) {
+                                                         devEMF::emf(file, width = input$width_km, height = input$height_km, emfPlus = F, coordDPI = 600)
+                                                         plot(kaplanMeierPlot())
+                                                         dev.off()
+                                                       })
+  
+  
+  output$kaplanMeierPlotPlotCaption <- renderUI({
+    text <- "<strong>Figure 5.</strong> Kaplan Meier plot, showing survival as a function of time. This plot
+      is adjusted using the propensity score: The target curve (<em>%s</em>) shows the actual observed survival. The
+      comparator curve (<em>%s</em>) applies reweighting to approximate the counterfactual of what the target survival
+      would look like had the target cohort been exposed to the comparator instead. The shaded area denotes
+      the 95 percent confidence interval."
+    return(HTML(sprintf(text, input$target, input$comparator)))
+  })
+  
+  
+  
+  psDistPlot <- reactive({
+    if (input$analysis_tb1 %in% unique(analysis.originalN)) return(NULL)
+    ps <- data.ps[database_id == input$database_ps & target_id == as.numeric(input$target_tb1) & comparator_id == as.numeric(input$comparator_tb1) & analysis_id == as.numeric(input$analysis_tb1)]
+    plot <- plotPs(ps, names(which(list.idinfo$exposure == input$target_tb1)), names(which(list.idinfo$exposure == input$comparator_tb1)))
+    return(plot)
+  })
+  
+  output$psDistPlot <- renderPlot({
+    return(psDistPlot())
+  })
+  
+  output$downloadPsDistPlotPng <- downloadHandler(filename = paste0("ps_", input$database_ps, "_", names(which(list.idinfo$exposure == input$target_tb1)), "_", names(which(list.idinfo$exposure == input$comparator_tb1)), "_",
+                                                                     "_", names(which(list.idinfo$analysis == input$analysis_tb1)), ".png"), 
+                                                  contentType = "image/png", 
+                                                  content = function(file) {
+                                                    ggplot2::ggsave(file, plot = psDistPlot(), width = input$width_ps, height = input$height_ps, dpi = 600)
+                                                  })
+  
+  output$downloadPsDistPlotEmf <- downloadHandler(filename = paste0("ps_", input$database_ps, "_", names(which(list.idinfo$exposure == input$target_tb1)), "_", names(which(list.idinfo$exposure == input$comparator_tb1)), "_",
+                                                                    "_", names(which(list.idinfo$analysis == input$analysis_tb1)), ".emf"), 
+                                                  contentType = "application/emf", 
+                                                  content = function(file) {
+                                                    devEMF::emf(file, width = input$width_ps, height = input$height_ps, emfPlus = T, coordDPI = 600)
+                                                    plot(psDistPlot())
+                                                    dev.off()
+                                                  })
+  
+
+  
+  balancePlot <- reactive({
+    writeLines("Plotting covariate balance")
+    plot <- plotCovariateBalanceScatterPlot(balance = getbalance()[databaseId == input$database_bal],
+                                            beforeLabel = "Before propensity score adjustment",
+                                            afterLabel = "After propensity score adjustment")
+    return(plot)
+  })
+  
+  output$balancePlot <- renderPlot({
+    return(balancePlot())
+  })
+  
+  output$downloadBalancePlotPng <- downloadHandler(filename = paste0("balanceplot_", input$database_bal, "_", names(which(list.idinfo$exposure == input$target_tb1)), "_", names(which(list.idinfo$exposure == input$comparator_tb1)), "_",
+                                                                     names(which(list.idinfo$outcome == input$outcome_tb1)), "_", names(which(list.idinfo$analysis == input$analysis_tb1)), ".png"), 
+                                                   contentType = "image/png", 
+                                                   content = function(file) {
+                                                     ggplot2::ggsave(file, plot = balancePlot(),  width = input$width_bal, height = input$height_bal, dpi = 600)
+                                                   })
+  
+  output$downloadBalancePlotEmf <- downloadHandler(filename = paste0("balanceplot_", input$database_bal, "_", names(which(list.idinfo$exposure == input$target_tb1)), "_", names(which(list.idinfo$exposure == input$comparator_tb1)), "_",
+                                                                     names(which(list.idinfo$outcome == input$outcome_tb1)), "_", names(which(list.idinfo$analysis == input$analysis_tb1)), ".emf"), 
+                                                   contentType = "application/emf", 
+                                                   content = function(file) {
+                                                     devEMF::emf(file, width = input$width_bal, height = input$height_bal, emfPlus = F, coordDPI = 600)
+                                                     plot(balancePlot())
+                                                     dev.off()
+                                                     })
+  
+  output$balancePlotCaption <- renderUI({
+    text <- "<strong>Figure 3.</strong> Covariate balance before and after propensity score adjustment. Each dot represents
+      the standardizes difference of means for a single covariate before and after propensity score adjustment on the propensity
+      score. Move the mouse arrow over a dot for more details."
+    return(HTML(sprintf(text)))
+  })
+  
+  output$hoverInfoBalanceScatter <- renderUI({
+    
+    hover <- input$plotHoverBalanceScatter
+    point <- nearPoints(getbalance()[databaseId == input$database_bal], hover, threshold = 5, maxpoints = 1, addDist = TRUE)
+    if (nrow(point) == 0) {
+      return(NULL)
+    }
+    left_pct <- (hover$x - hover$domain$left) / (hover$domain$right - hover$domain$left)
+    top_pct <- (hover$domain$top - hover$y) / (hover$domain$top - hover$domain$bottom)
+    left_px <- hover$range$left + left_pct * (hover$range$right - hover$range$left)
+    top_px <- hover$range$top + top_pct * (hover$range$bottom - hover$range$top)
+    style <- paste0("position:absolute; z-index:100; background-color: rgba(245, 245, 245, 0.85); ",
+                    "left:",
+                    left_px - 251,
+                    "px; top:",
+                    top_px - 150,
+                    "px; width:500px;")
+    beforeMatchingStdDiff <- formatC(point$beforeMatchingStdDiff, digits = 2, format = "f")
+    afterMatchingStdDiff <- formatC(point$afterMatchingStdDiff, digits = 2, format = "f")
+    div(
+      style = "position: relative; width: 0; height: 0",
+      wellPanel(
+        style = style,
+        p(HTML(paste0("<b> Covariate: </b>", point$covariateName, "<br/>",
+                      "<b> Std. diff before ",tolower(row$psStrategy),": </b>", beforeMatchingStdDiff, "<br/>",
+                      "<b> Std. diff after ",tolower(row$psStrategy),": </b>", afterMatchingStdDiff)))
+      )
+    )
+  })
   
   session$onSessionEnded(function() {
     stopApp()
   })
-  
-  
   
   
 }

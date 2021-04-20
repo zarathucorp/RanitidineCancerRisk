@@ -49,4 +49,13 @@ analysis.originalN <- c(1, 1, 1, 1, 15, 15, 15, 15, 37, 39, 37, 39, 37, 39, 37, 
 names(analysis.originalN) <- sort(lapply(list.result, function(x){unique(x$analysis_id)}) %>% Reduce(intersect, .))
 
 
+## KM info
+data.km <- lapply(names.study, function(x){
+ fread(file.path("res",x, "kaplan_meier_dist.csv"), integer64 = "numeric")
+}) %>% rbindlist
+
+## ps distribution
+data.ps <- lapply(names.study, function(x){
+  fread(file.path("res",x, "preference_score_dist.csv"), integer64 = "numeric")
+}) %>% rbindlist
 
