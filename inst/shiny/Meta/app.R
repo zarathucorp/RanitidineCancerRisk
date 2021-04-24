@@ -1,4 +1,4 @@
-library(shiny);library(DT);library(shinycustomloader);library(ggplot2);library(meta)
+library(shiny);library(DT);library(shinycustomloader);library(ggplot2);library(meta);library(forestplot)
 source("global.R")
 options(shiny.sanitize.errors = F)
 
@@ -95,6 +95,17 @@ ui <- navbarPage("Ranitidine",
                                                    div(style = "display: inline-block;vertical-align:top;",
                                                        downloadButton("downloadSystematicErrorPlotPng", label = "Download plot as PNG"),
                                                        downloadButton("downloadSystematicErrorPlotEmf", label = "Download plot as EMF")
+                                                   )),
+                                          tabPanel("Various outcome",
+                                                   radioButtons("database_vout", "Database", names.study, names.study[1], inline = T),
+                                                   plotOutput("forest_vout"),
+                                                   fluidRow(
+                                                     column(6, sliderInput("width_vout","Plot width", min = 2, max = 20, value = 12)),
+                                                     column(6, sliderInput("height_vout","Plot height", min = 2, max = 15, value = 5.5, step = 0.5))
+                                                   ),
+                                                   div(style = "display: inline-block;vertical-align:top;",
+                                                       downloadButton("downloadvoutPlotPng", label = "Download plot as PNG"),
+                                                       downloadButton("downloadvoutPlotEmf", label = "Download plot as EMF")
                                                    ))
                               )
                               
@@ -570,6 +581,94 @@ server <- function(input, output, session) {
                                                            content = function(file) {
                                                              devEMF::emf(file, width = input$width_sys, height = input$height_sys, emfPlus = F, coordDPI = 600)
                                                              plot(systematicErrorPlot())
+                                                             dev.off()
+                                                           })
+  
+  obj.vout <- reactive({
+    res <- data.result[database_id == input$database_vout & target_id == as.numeric(input$target_tb1) & comparator_id == as.numeric(input$comparator_tb1) & (outcome_id %in% list.idinfo$outcome) & analysis_id == as.numeric(input$analysis_tb1)][!is.na(rr) & !is.na(ci_95_lb) & !is.na(ci_95_ub)][order(outcome_id)]
+    
+    tabletext <- cbind(c("Outcome","\n", unlist(sapply(res$outcome_id, function(x){names(list.idinfo$outcome)[which(list.idinfo$outcome == x)]}))),
+                       c("HR(95% CI)", "\n", paste0(round(res$rr, 2), "(", round(res$ci_95_lb, 2), "-", round(res$ci_95_ub), ")")),
+                       c("P Value","\n",ifelse(res$p >= 0.001, round(res$p, 3), "< 0.001")))
+    
+    tabletext <- tabletext[, c(1,2, 3)]
+    return(list(res = res, tabletext = tabletext))
+  })
+  
+  voutPlot <- reactive({
+    res <- obj.vout()$res
+    tabletext <- obj.vout()$tabletext
+    ## Save as tiff 
+    forestplot::forestplot(labeltext=tabletext, graph.pos=2, xticks = c(0.1, 0.5, 1, 2, 10), xlog= T, align = c("r", rep("c", ncol(tabletext) - 1)),                          ## graph.pos- column number
+                           mean=c(NA,NA,as.numeric(res$rr)), 
+                           lower=c(NA,NA,as.numeric(res$ci_95_lb)), upper=c(NA,NA,as.numeric(res$ci_95_ub)),
+                           title="Hazard Ratio",
+                           xlab="<---Comparator risky ---    ---Target risky --->",    ## You cas modify this.
+                           hrzl_lines=list("3" = gpar(lwd=1, col="#99999922")
+                           ),
+                           
+                           txt_gp=fpTxtGp(label=gpar(cex=1.25),
+                                          ticks=gpar(cex=1.1),
+                                          xlab=gpar(cex = 1.2),
+                                          title=gpar(cex = 1.2)),
+                           col=fpColors(box="black", lines="black", zero = "gray50"),
+                           zero=1, cex=0.9, lineheight = "auto", boxsize=0.2, colgap=unit(6,"mm"),
+                           lwd.ci=2, ci.vertices=TRUE, ci.vertices.height = 0.16) 
+  
+  })
+  
+  
+  output$forest_vout <- renderPlot({
+    return(voutPlot())
+  })
+  
+  output$downloadvoutPlotPng <- downloadHandler(filename = paste0("forestoutcomes", input$database_vout, ".png"), 
+                                                           contentType = "image/png", 
+                                                           content = function(file) {
+                                                             grDevices::png(file, width = input$width_vout, height = input$width_vout, units = "in")
+                                                             res <- obj.vout()$res
+                                                             tabletext <- obj.vout()$tabletext
+                                                             ## Save as tiff 
+                                                             forestplot::forestplot(labeltext=tabletext, graph.pos=2, xticks = c(0.1, 0.5, 1, 2, 10), xlog= T, align = c("r", rep("c", ncol(tabletext) - 1)),                          ## graph.pos- column number
+                                                                                    mean=c(NA,NA,as.numeric(res$rr)), 
+                                                                                    lower=c(NA,NA,as.numeric(res$ci_95_lb)), upper=c(NA,NA,as.numeric(res$ci_95_ub)),
+                                                                                    title="Hazard Ratio",
+                                                                                    xlab="<---Comparator risky ---    ---Target risky --->",    ## You cas modify this.
+                                                                                    hrzl_lines=list("3" = gpar(lwd=1, col="#99999922")
+                                                                                    ),
+                                                                                    
+                                                                                    txt_gp=fpTxtGp(label=gpar(cex=1.25),
+                                                                                                   ticks=gpar(cex=1.1),
+                                                                                                   xlab=gpar(cex = 1.2),
+                                                                                                   title=gpar(cex = 1.2)),
+                                                                                    col=fpColors(box="black", lines="black", zero = "gray50"),
+                                                                                    zero=1, cex=0.9, lineheight = "auto", boxsize=0.2, colgap=unit(6,"mm"),
+                                                                                    lwd.ci=2, ci.vertices=TRUE, ci.vertices.height = 0.16) 
+                                                             dev.off()
+                                                           })
+  
+  output$downloadvoutPlotEmf <- downloadHandler(filename = paste0("forestoutcomes", input$database_vout, ".emf"), 
+                                                           contentType = "application/emf", 
+                                                           content = function(file) {
+                                                             devEMF::emf(file, width = input$width_vout, height = input$width_vout, emfPlus = F, coordDPI = 600)
+                                                             res <- obj.vout()$res
+                                                             tabletext <- obj.vout()$tabletext
+                                                             ## Save as tiff 
+                                                             forestplot::forestplot(labeltext=tabletext, graph.pos=2, xticks = c(0.1, 0.5, 1, 2, 10), xlog= T, align = c("r", rep("c", ncol(tabletext) - 1)),                          ## graph.pos- column number
+                                                                                    mean=c(NA,NA,as.numeric(res$rr)), 
+                                                                                    lower=c(NA,NA,as.numeric(res$ci_95_lb)), upper=c(NA,NA,as.numeric(res$ci_95_ub)),
+                                                                                    title="Hazard Ratio",
+                                                                                    xlab="<---Comparator risky ---    ---Target risky --->",    ## You cas modify this.
+                                                                                    hrzl_lines=list("3" = gpar(lwd=1, col="#99999922")
+                                                                                    ),
+                                                                                    
+                                                                                    txt_gp=fpTxtGp(label=gpar(cex=1.25),
+                                                                                                   ticks=gpar(cex=1.1),
+                                                                                                   xlab=gpar(cex = 1.2),
+                                                                                                   title=gpar(cex = 1.2)),
+                                                                                    col=fpColors(box="black", lines="black", zero = "gray50"),
+                                                                                    zero=1, cex=0.9, lineheight = "auto", boxsize=0.2, colgap=unit(6,"mm"),
+                                                                                    lwd.ci=2, ci.vertices=TRUE, ci.vertices.height = 0.16) 
                                                              dev.off()
                                                            })
   

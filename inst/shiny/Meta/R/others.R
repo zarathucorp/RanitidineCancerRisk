@@ -125,8 +125,7 @@ plotKaplanMeier <- function(kaplanMeier, targetName, comparatorName, ci = F, ymi
     ggplot2::theme_classic() +
     #ggplot2::geom_ribbon(color = rgb(0, 0, 0, alpha = 0)) +
     ggplot2::geom_step(size = 1) +
-    ggplot2::scale_color_manual(values = c(rgb(0.8, 0, 0, alpha = 0.8),
-                                           rgb(0, 0, 0.8, alpha = 0.8))) +
+    ggplot2::scale_color_manual(values = c("#00AFBB", "#E7B800")) +
     ggplot2::scale_fill_manual(values = c(rgb(0.8, 0, 0, alpha = 0.3),
                                           rgb(0, 0, 0.8, alpha = 0.3))) +
     ggplot2::scale_x_continuous(xLabel, limits = xlims, breaks = xBreaks) +
