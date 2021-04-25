@@ -1,4 +1,4 @@
-library(shiny);library(DT);library(shinycustomloader);library(ggplot2);library(meta);library(forestplot)
+library(shiny);library(DT);library(shinycustomloader);library(ggplot2);library(meta);library(forestplot);library(scales)
 source("global.R")
 options(shiny.sanitize.errors = F)
 
@@ -106,6 +106,42 @@ ui <- navbarPage("Ranitidine",
                                                    div(style = "display: inline-block;vertical-align:top;",
                                                        downloadButton("downloadvoutPlotPng", label = "Download plot as PNG"),
                                                        downloadButton("downloadvoutPlotEmf", label = "Download plot as EMF")
+                                                   )),
+                                          tabPanel("HR distribution",
+                                                   plotOutput("RrDistr"),
+                                                   fluidRow(
+                                                     column(6, sliderInput("width_rrdistr","Plot width", min = 2, max = 20, value = 12)),
+                                                     column(6, sliderInput("height_rrdistr","Plot height", min = 2, max = 15, value = 5.5, step = 0.5))
+                                                   ),
+                                                   div(style = "display: inline-block;vertical-align:top;",
+                                                       downloadButton("downloadrrdistrPlotPng", label = "Download plot as PNG"),
+                                                       downloadButton("downloadrrdistrPlotEmf", label = "Download plot as EMF")
+                                                   )),
+                                          tabPanel("Sensitivity analysis",
+                                                   radioButtons("database_sens", "Database", c("Meta", names.study), names.study[1], inline = T),
+                                                   conditionalPanel('input.database_sens == "Meta"',
+                                                                    selectInput("database_sens_meta", "Database to include", names.study, names.study, multiple = T)),
+                                                   selectInput("outcomegroup_sens", "Outcome Group", names(type.cancer), names(type.cancer)[1]),
+                                                   plotOutput("Sensitivity"),
+                                                   sliderInput("xmax_sen", "max HR in plot", min = 1.2, max = 3, value = 2, step = 0.1),
+                                                   fluidRow(
+                                                     column(6, sliderInput("width_sens","Plot width", min = 2, max = 20, value = 12)),
+                                                     column(6, sliderInput("height_sens","Plot height", min = 2, max = 15, value = 12, step = 0.5))
+                                                   ),
+                                                   div(style = "display: inline-block;vertical-align:top;",
+                                                       downloadButton("downloadsensPlotPng", label = "Download plot as PNG"),
+                                                       downloadButton("downloadsensPlotEmf", label = "Download plot as EMF")
+                                                   )),
+                                          tabPanel("Other drug",
+                                                   radioButtons("database_othdrug", "Database", c("Meta", names.study), names.study[1], inline = T),
+                                                   plotOutput("Otherdrug"),
+                                                   fluidRow(
+                                                     column(6, sliderInput("width_othdrug","Plot width", min = 2, max = 20, value = 12)),
+                                                     column(6, sliderInput("height_othdrug","Plot height", min = 2, max = 15, value = 5.5, step = 0.5))
+                                                   ),
+                                                   div(style = "display: inline-block;vertical-align:top;",
+                                                       downloadButton("downloadothdrugPlotPng", label = "Download plot as PNG"),
+                                                       downloadButton("downloadothdrugPlotEmf", label = "Download plot as EMF")
                                                    ))
                               )
                               
@@ -603,7 +639,7 @@ server <- function(input, output, session) {
                            mean=c(NA,NA,as.numeric(res$rr)), 
                            lower=c(NA,NA,as.numeric(res$ci_95_lb)), upper=c(NA,NA,as.numeric(res$ci_95_ub)),
                            title="Hazard Ratio",
-                           xlab="<---Comparator risky ---    ---Target risky --->",    ## You cas modify this.
+                           xlab="<---Favor Ranitidine ---    ---Favor Others --->",    ## You cas modify this.
                            hrzl_lines=list("3" = gpar(lwd=1, col="#99999922")
                            ),
                            
@@ -633,7 +669,7 @@ server <- function(input, output, session) {
                                                                                     mean=c(NA,NA,as.numeric(res$rr)), 
                                                                                     lower=c(NA,NA,as.numeric(res$ci_95_lb)), upper=c(NA,NA,as.numeric(res$ci_95_ub)),
                                                                                     title="Hazard Ratio",
-                                                                                    xlab="<---Comparator risky ---    ---Target risky --->",    ## You cas modify this.
+                                                                                    xlab="<---Favor Ranitidine ---    ---Favor Others --->",    ## You cas modify this.
                                                                                     hrzl_lines=list("3" = gpar(lwd=1, col="#99999922")
                                                                                     ),
                                                                                     
@@ -658,7 +694,7 @@ server <- function(input, output, session) {
                                                                                     mean=c(NA,NA,as.numeric(res$rr)), 
                                                                                     lower=c(NA,NA,as.numeric(res$ci_95_lb)), upper=c(NA,NA,as.numeric(res$ci_95_ub)),
                                                                                     title="Hazard Ratio",
-                                                                                    xlab="<---Comparator risky ---    ---Target risky --->",    ## You cas modify this.
+                                                                                    xlab="<---Favor Ranitidine ---    ---Favor Others --->",    ## You cas modify this.
                                                                                     hrzl_lines=list("3" = gpar(lwd=1, col="#99999922")
                                                                                     ),
                                                                                     
@@ -671,6 +707,127 @@ server <- function(input, output, session) {
                                                                                     lwd.ci=2, ci.vertices=TRUE, ci.vertices.height = 0.16) 
                                                              dev.off()
                                                            })
+  
+  
+  obj.RrDistr <- reactive({
+    res <- data.result[target_id == as.numeric(input$target_tb1) & comparator_id == as.numeric(input$comparator_tb1) & (outcome_id == input$outcome_tb1) & !(analysis_id %in% c(1998,2998, 3998, 4998, 5998))]
+    
+    #nace$databaseId <- factor(nace$databaseId, level = c("OptumPanTher","IQVIA - Hospital", "HIRA", "Meta-analysis"))
+    resBeforeCal <- res[, .SD, .SDcols = c("target_id", "comparator_id", "outcome_id", "analysis_id", "rr", "ci_95_lb", "ci_95_ub", "p", "database_id")][, Calibration := "Before calibration"][]
+    resAfterCal <- res[, .SD, .SDcols = c("target_id", "comparator_id", "outcome_id", "analysis_id", "calibrated_rr", "calibrated_ci_95_lb", "calibrated_ci_95_ub", "calibrated_p", "database_id")][, Calibration := "After calibration"][]
+    names(resAfterCal)[5:8] <- c("rr", "ci_95_lb", "ci_95_ub", "p")
+      
+    resCal <- rbind(resBeforeCal, resAfterCal)
+    resCal$Calibration <- factor(resCal$Calibration, level = c("Before calibration", "After calibration"))
+    
+    primaryRr<- resCal[analysis_id == 42]
+    
+    customLimit = c(0.60,1.7)
+    customBreaks = c(0.60,0.75,0.9,1.0,1.1, 1.3,1.7)
+    
+    RrDistr<-ggplot(resCal, aes(x=rr,fill = Calibration, color = Calibration)) +
+      geom_histogram(#fill="white",
+        alpha = 0.3, position="identity", bins=50) +
+      geom_vline(data = primaryRr, aes(xintercept=rr, color = Calibration)) +
+      geom_vline(aes(xintercept=1.0), linetype="dashed") +
+      facet_grid(database_id~.)+
+      ggplot2::theme_bw()+
+      scale_x_continuous(trans=log10_trans(), limits= customLimit,breaks =customBreaks
+      )+
+      xlab('Hazard ratio')+ ylab("Count")
+    return(RrDistr)
+  })
+  
+  output$RrDistr <- renderPlot({
+    return(obj.RrDistr())
+  })
+  
+  output$downloadrrdistrPlotPng <- downloadHandler(filename = paste0("obj.RrDistr_", names(which(list.idinfo$exposure == input$target_tb1)), "_", names(which(list.idinfo$exposure == input$comparator_tb1)), "_",
+                                                                             names(which(list.idinfo$outcome == input$outcome)), ".png"), 
+                                                           contentType = "image/png", 
+                                                           content = function(file) {
+                                                             ggplot2::ggsave(file, plot = obj.RrDistr(), width = input$width_rrdistr, height = input$height_rrdistr, dpi = 600)
+                                                           })
+  
+  output$downloadrrdistrPlotEmf <- downloadHandler(filename = paste0("obj.RrDistr_", names(which(list.idinfo$exposure == input$target_tb1)), "_", names(which(list.idinfo$exposure == input$comparator_tb1)), "_",
+                                                                             names(which(list.idinfo$outcome == input$outcome)), ".emf"), 
+                                                           contentType = "application/emf", 
+                                                           content = function(file) {
+                                                             devEMF::emf(file, width = input$width_rrdistr, height = input$height_rrdistr, emfPlus = F, coordDPI = 600)
+                                                             plot(obj.RrDistr())
+                                                             dev.off()
+                                                           })
+  
+  
+  obj.sens <- reactive({
+    limits <- c(1/input$xmax_sen, input$xmax_sen)
+    res0 <- data.result[!is.na(rr) & target_id == as.numeric(input$target_tb1) & comparator_id == as.numeric(input$comparator_tb1) & (outcome_id %in% type.cancer[[input$outcomegroup_sens]]) & !(analysis_id %in% c(1998, 2998, 3998, 4998, 5998))]
+    if (input$database_sens != "Meta"){
+      res <- res0[database_id == input$database_sens] %>% merge(type.analysis, by = "analysis_id", all.x = T)
+    } else{
+      res0 <- res0[database_id %in% input$database_sens_meta]
+      pairs <- res0[, .N, keyby = c("outcome_id", "analysis_id")]
+      res <- mapply(function(x, y){
+        obj.metagen <-metagen(TE = log_rr, seTE = se_log_rr, data = res0[outcome_id == x & analysis_id == y])
+        return(exp(c("rr" = obj.metagen$TE.random, "ci_95_lb" = obj.metagen$lower.random, "ci_95_ub" = obj.metagen$upper.random, "p" = log(obj.metagen$pval.fixed))))
+      }, pairs$outcome_id, pairs$analysis_id) %>% t %>% cbind(pairs[, 1:2]) %>% merge(type.analysis, by = "analysis_id", all.x = T)
+      
+    }
+    
+    res$outcomeName <- factor(sapply(res$outcome_id, function(x){names(list.idinfo$outcome)[which(list.idinfo$outcome == x)]}))
+    res$Significance<-factor(ifelse(res$p<0.05,"P<.05","Not significant"), levels = c("P<.05","Not significant"))
+    res[, `:=`(ci95LbOut = ifelse(ci_95_lb < limits[1], rr - limits[1], NA), 
+               ci95UbOut = ifelse(ci_95_ub > limits[2], rr - limits[2], NA))]
+    
+    return(gridForest(res, xLimits = limits))
+    
+  })
+  
+  output$Sensitivity <- renderPlot({
+    return(obj.sens())
+  })
+  
+  output$downloadsensPlotPng <- downloadHandler(filename = paste0("Sensitivity", input$database_sens, "_", names(which(list.idinfo$exposure == input$target_tb1)), "_", names(which(list.idinfo$exposure == input$comparator_tb1)), "_",
+                                                                             input$outcomegroup_sens, ".png"), 
+                                                           contentType = "image/png", 
+                                                           content = function(file) {
+                                                             ggplot2::ggsave(file, plot = obj.sens(), width = input$width_sens, height = input$height_sens, dpi = 600)
+                                                           })
+  
+  output$downloadsensPlotEmf <- downloadHandler(filename = paste0("Sensitivity", input$database_sens, "_", names(which(list.idinfo$exposure == input$target_tb1)), "_", names(which(list.idinfo$exposure == input$comparator_tb1)), "_",
+                                                                  input$outcomegroup_sens, ".emf"), 
+                                                           contentType = "application/emf", 
+                                                           content = function(file) {
+                                                             devEMF::emf(file, width = input$width_sens, height = input$height_sens, emfPlus = F, coordDPI = 600)
+                                                             plot(obj.sens())
+                                                             dev.off()
+                                                           })
+  
+  
+  obj.othdrug <- reactive({
+    
+  })
+  
+  output$Otherdrug <- renderPlot({
+    return(obj.othdrug())
+  })
+  
+  output$downloadothdrugPlotPng <- downloadHandler(filename = paste0("Otherdrug", input$database_sys, "_", names(which(list.idinfo$exposure == input$target_tb1)), "_", names(which(list.idinfo$exposure == input$comparator_tb1)), "_",
+                                                                             names(which(list.idinfo$outcome == input$outcome_tb1)), ".png"), 
+                                                           contentType = "image/png", 
+                                                           content = function(file) {
+                                                             ggplot2::ggsave(file, plot = obj.othdrug(), width = input$width_othdrug, height = input$height_othdrug, dpi = 600)
+                                                           })
+  
+  output$downloadothdrugPlotEmf <- downloadHandler(filename = paste0("Otherdrug", input$database_sys, "_", names(which(list.idinfo$exposure == input$target_tb1)), "_", names(which(list.idinfo$exposure == input$comparator_tb1)), "_",
+                                                                             names(which(list.idinfo$outcome == input$outcome_tb1)), ".emf"), 
+                                                           contentType = "application/emf", 
+                                                           content = function(file) {
+                                                             devEMF::emf(file, width = input$width_othdrug, height = input$height_othdrug, emfPlus = F, coordDPI = 600)
+                                                             plot(obj.othdrug())
+                                                             dev.off()
+                                                           })
+  
   
   session$onSessionEnded(function() {
     stopApp()

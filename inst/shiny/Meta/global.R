@@ -51,6 +51,8 @@ analysis.originalN <- c(1, 1, 1, 1, 15, 15, 15, 15, 37, 39, 37, 39, 37, 39, 37, 
 names(analysis.originalN) <- sort(lapply(data.result[, unique(analysis_id), keyby = "database_id"] %>% split(.$database_id), function(x){unique(x$V1)}) %>% Reduce(intersect, .))
 
 
+
+
 ## KM info
 data.km <- lapply(names.study, function(x){
  fread(file.path("res",x, "kaplan_meier_dist.csv"), integer64 = "numeric")
@@ -78,3 +80,32 @@ data.negres <- lapply(names.study, function(x){
   dd$database_id <- x
   return(dd)
 }) %>% rbindlist
+
+## Analysis type: for sensitivity analysis
+type.analysis <- data.table(analysis_id = list.idinfo$analysis,
+                            Adjustment = sapply(strsplit(names(list.idinfo$analysis), ", "), `[[`, 1), 
+                            TAR = sapply(strsplit(names(list.idinfo$analysis), ", "), function(x){
+                              res <- NULL
+                              if (length(x) == 2){
+                                res <- x[2]
+                              } else{
+                                res <- paste(x[2:3], collapse = ", ")
+                              }
+                              return(gsub("on", "On", res))
+                            }),
+                            Interaction = grepl("interaction", names(list.idinfo$analysis)))
+
+type.analysis[, `:=`(Adjustment = factor(Adjustment, levels = c("No PS matching", "1:1 PS matching", "Variable-ratio PS matching", "PS stratification")),
+                     TAR = factor(TAR))] 
+
+## Group outcome: for sensitivity analysis
+name.cancer <- unique(sapply(strsplit(sapply(strsplit(names(list.idinfo$outcome), " cancer| Cancer"), `[[`, 1), ", "), `[[`, 1))
+type.cancer <- sapply(name.cancer[-length(name.cancer)], function(x){
+  if (x == "Overall"){
+    list.idinfo$outcome[c(grep(x, names(list.idinfo$outcome), value = T), "Cancer mortality")]
+  } else{
+    list.idinfo$outcome[grep(x, names(list.idinfo$outcome), value = T)]
+  }
+})
+
+
