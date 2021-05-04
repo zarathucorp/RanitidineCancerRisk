@@ -494,3 +494,17 @@ gridForest <- function(results, breaks = c(0.5, 0.8, 1, 1.25, 2),
   return(resultPlot)
 }
 
+## Funnel plot
+mkfunnel <- function(obj.meta, input_fixed_random, level = 0.95, studlab, yaxis, contour = F, legend.pos = "topright", backtransf = F){
+  if (contour == F){
+    funnel(obj.meta, comb.fixed = ("fixed effect" %in% input_fixed_random), comb.random = ("random effects" %in% input_fixed_random),
+           level = level, studlab = studlab, yaxis = yaxis, backtransf = backtransf)
+  } else{
+    funnel(obj.meta, comb.fixed = ("fixed effect" %in% input_fixed_random), comb.random = ("random effects" %in% input_fixed_random),
+           level = level, studlab = studlab, yaxis = yaxis, contour = c(0.9, 0.95, 0.99), backtransf = backtransf)
+    legend(legend.pos,
+           c("0.1 > p > 0.05", "0.05 > p > 0.01", "< 0.01"), fill = gray(seq(0.5, 0.9, len = 3)))
+  }
+  
+  
+}

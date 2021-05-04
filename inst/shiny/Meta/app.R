@@ -18,11 +18,31 @@ ui <- navbarPage("Ranitidine",
                                                    withLoader(DTOutput("table1"), type="html", loader="loader6")),
                                           tabPanel("Meta analysis",
                                                    selectInput("database_meta", "Database", names.study, names.study, multiple = T),
-                                                   withLoader(plotOutput("meta", width = "100%"), type="html", loader="loader6"),
-                                                   h3("Download options"),
-                                                   wellPanel(
-                                                     uiOutput("downloadControls_forest"),
-                                                     downloadButton("downloadButton_forest", label = "Download the plot")
+                                                   checkboxGroupInput("fixed_random", "Estimate type", choices = c("fixed effect", "random effects"), selected = c("random effects"), inline = T),
+                                                   checkboxInput("trimfill", "Apply Trim & fill method", F),
+                                                   tabsetPanel(type = "pills",
+                                                               tabPanel("Forest plot",
+                                                                        withLoader(plotOutput("meta", width = "100%"), type="html", loader="loader6"),
+                                                                        h3("Download options"),
+                                                                        wellPanel(
+                                                                          uiOutput("downloadControls_forest"),
+                                                                          downloadButton("downloadButton_forest", label = "Download the plot"))
+                                                               ),
+                                                               tabPanel("Funnel plot",
+                                                                        radioButtons("ytype_funnel", "Weight type", c("S.E" = "se", "Inverse variance" = "invvar", "Inverse S.E" = "invse"), inline = T),
+                                                                        checkboxGroupInput("option_funnel", NULL, c("Show study" = "studlab", "Show contour" = "contour", "Original scale(HR, RR, OR)" = "backtransf"), "studlab", inline = T),
+                                                                        withLoader(plotOutput("funnel", width = "100%"), type="html", loader="loader6"),
+                                                                        h3("Download options"),
+                                                                        wellPanel(
+                                                                          uiOutput("downloadControls_funnel"),
+                                                                          downloadButton("downloadButton_funnel", label = "Download the plot")
+                                                                        )
+                                                                        
+                                                               ),
+                                                               tabPanel("R output", 
+                                                                        withLoader(verbatimTextOutput("metaout"), type="html", loader="loader6"),
+                                                                        withLoader(verbatimTextOutput("egger"), type="html", loader="loader6")
+                                                               )
                                                    )),
                                           tabPanel("KM plot", 
                                                    radioButtons("database_kap", "Database", names.study, names.study[1], inline = T),
@@ -268,6 +288,11 @@ server <- function(input, output, session) {
     out.meta$event.rate.c <- round(with(DM, comparator_outcomes/(comparator_days/365))*1000,1)
     out.meta$person.year.c<-with(DM, round((comparator_days/365),0))
     out.meta$vname <- gsub(" user", "", c(names(which(list.idinfo$exposure == input$target_tb1)), names(which(list.idinfo$exposure == input$comparator_tb1))))
+    
+    if (input$trimfill == T){
+      out.meta <- trimfill(out.meta)
+    }
+
     return(out.meta)
     
   })
@@ -282,7 +307,8 @@ server <- function(input, output, session) {
     forest(obj.meta(),  leftcols = c("studlab", "n.e","event.e", "n.c","event.c", "effect","ci"), 
            leftlabs = c("Source", "Total","Event","Total","Event","HR","95% CI"), pooled.total= T, pooled.events = T, 
            rightcols = F, lab.e = paste0("             ", obj.meta()$vname[1]), lab.c = paste0("             ", obj.meta()$vname[2]), lab.e.attach.to.col = "n.e", lab.c.attach.to.col = "n.c",
-           fontsize=12, comb.fixed = FALSE, comb.random = TRUE, text.random = "Overall", col.diamond.random = "royalblue", col.diamond.lines = "black",
+           fontsize=12, comb.fixed = ("fixed effect" %in% input$fixed_random), comb.random = ("random effects" %in% input$fixed_random),
+           text.random = "Overall", col.diamond.random = "royalblue", col.diamond.lines = "black",
            digits = 2, digits.pval =3, digits.I2 = 1, just.studlab="left", just.addcols.left= "right", just = "center", xlim = c(round(1/xlim(), 2),xlim()),
            plotwidth ="8cm", spacing =1, addrow.overall=TRUE, print.I2 = TRUE, print.pval.I2=F, print.tau2 = F, print.pval.Q = F,
            label.left = paste0("Favor\n", obj.meta()$vname[1]), label.right = paste0("Favor\n", obj.meta()$vname[2]), scientific.pval = F, big.mark =","
@@ -314,6 +340,7 @@ server <- function(input, output, session) {
     filename =  function() {
       fname <- paste0("forestplot_", names(which(list.idinfo$exposure == input$target_tb1)), "_", names(which(list.idinfo$exposure == input$comparator_tb1)), "_",
                       names(which(list.idinfo$outcome == input$outcome_tb1)), "_", names(which(list.idinfo$analysis == input$analysis_tb1)), ".", input$forest_file_ext)
+      return(gsub("[[:punct:]]", "_", fname))
 
     },
     # content is a function with argument file. content writes the plot to the device
@@ -330,7 +357,8 @@ server <- function(input, output, session) {
                        forest(obj.meta(),  leftcols = c("studlab", "n.e","event.e", "n.c","event.c", "effect","ci"), 
                               leftlabs = c("Source", "Total","Event","Total","Event","HR","95% CI"), pooled.total= T, pooled.events = T, 
                               rightcols = F, lab.e = paste0("             ", obj.meta()$vname[1]), lab.c = paste0("             ", obj.meta()$vname[2]), lab.e.attach.to.col = "n.e", lab.c.attach.to.col = "n.c",
-                              fontsize=12, comb.fixed = FALSE, comb.random = TRUE, text.random = "Overall", col.diamond.random = "royalblue", col.diamond.lines = "black",
+                              fontsize=12, comb.fixed = ("fixed effect" %in% input$fixed_random), comb.random = ("random effects" %in% input$fixed_random),
+                              text.random = "Overall", col.diamond.random = "royalblue", col.diamond.lines = "black",
                               digits = 2, digits.pval =3, digits.I2 = 1, just.studlab="left", just.addcols.left= "right", just = "center", xlim = c(round(1/xlim(), 2),xlim()),
                               plotwidth ="8cm", spacing =1, addrow.overall=TRUE, print.I2 = TRUE, print.pval.I2=F, print.tau2 = F, print.pval.Q = F,
                               label.left = paste0("Favor\n", obj.meta()$vname[1]), label.right = paste0("Favor\n", obj.meta()$vname[2]), scientific.pval = F, big.mark =","
@@ -342,7 +370,8 @@ server <- function(input, output, session) {
                        forest(obj.meta(),  leftcols = c("studlab", "n.e","event.e", "n.c","event.c", "effect","ci"), 
                               leftlabs = c("Source", "Total","Event","Total","Event","HR","95% CI"), pooled.total= T, pooled.events = T, 
                               rightcols = F, lab.e = paste0("             ", obj.meta()$vname[1]), lab.c = paste0("             ", obj.meta()$vname[2]), lab.e.attach.to.col = "n.e", lab.c.attach.to.col = "n.c",
-                              fontsize=12, comb.fixed = FALSE, comb.random = TRUE, text.random = "Overall", col.diamond.random = "royalblue", col.diamond.lines = "black",
+                              fontsize=12, comb.fixed = ("fixed effect" %in% input$fixed_random), comb.random = ("random effects" %in% input$fixed_random),
+                              text.random = "Overall", col.diamond.random = "royalblue", col.diamond.lines = "black",
                               digits = 2, digits.pval =3, digits.I2 = 1, just.studlab="left", just.addcols.left= "right", just = "center", xlim = c(round(1/xlim(), 2),xlim()),
                               plotwidth ="8cm", spacing =1, addrow.overall=TRUE, print.I2 = TRUE, print.pval.I2=F, print.tau2 = F, print.pval.Q = F,
                               label.left = paste0("Favor\n", obj.meta()$vname[1]), label.right = paste0("Favor\n", obj.meta()$vname[2]), scientific.pval = F, big.mark =","
@@ -353,7 +382,8 @@ server <- function(input, output, session) {
                        forest(obj.meta(),  leftcols = c("studlab", "n.e","event.e", "n.c","event.c", "effect","ci"), 
                               leftlabs = c("Source", "Total","Event","Total","Event","HR","95% CI"), pooled.total= T, pooled.events = T, 
                               rightcols = F, lab.e = paste0("             ", obj.meta()$vname[1]), lab.c = paste0("             ", obj.meta()$vname[2]), lab.e.attach.to.col = "n.e", lab.c.attach.to.col = "n.c",
-                              fontsize=12, comb.fixed = FALSE, comb.random = TRUE, text.random = "Overall", col.diamond.random = "royalblue", col.diamond.lines = "black",
+                              fontsize=12, comb.fixed = ("fixed effect" %in% input$fixed_random), comb.random = ("random effects" %in% input$fixed_random),
+                              text.random = "Overall", col.diamond.random = "royalblue", col.diamond.lines = "black",
                               digits = 2, digits.pval =3, digits.I2 = 1, just.studlab="left", just.addcols.left= "right", just = "center", xlim = c(round(1/xlim(), 2),xlim()),
                               plotwidth ="8cm", spacing =1, addrow.overall=TRUE, print.I2 = TRUE, print.pval.I2=F, print.tau2 = F, print.pval.Q = F,
                               label.left = paste0("Favor\n", obj.meta()$vname[1]), label.right = paste0("Favor\n", obj.meta()$vname[2]), scientific.pval = F, big.mark =","
@@ -365,7 +395,8 @@ server <- function(input, output, session) {
                        forest(obj.meta(),  leftcols = c("studlab", "n.e","event.e", "n.c","event.c", "effect","ci"), 
                               leftlabs = c("Source", "Total","Event","Total","Event","HR","95% CI"), pooled.total= T, pooled.events = T, 
                               rightcols = F, lab.e = paste0("             ", obj.meta()$vname[1]), lab.c = paste0("             ", obj.meta()$vname[2]), lab.e.attach.to.col = "n.e", lab.c.attach.to.col = "n.c",
-                              fontsize=12, comb.fixed = FALSE, comb.random = TRUE, text.random = "Overall", col.diamond.random = "royalblue", col.diamond.lines = "black",
+                              fontsize=12, comb.fixed = ("fixed effect" %in% input$fixed_random), comb.random = ("random effects" %in% input$fixed_random),
+                              text.random = "Overall", col.diamond.random = "royalblue", col.diamond.lines = "black",
                               digits = 2, digits.pval =3, digits.I2 = 1, just.studlab="left", just.addcols.left= "right", just = "center", xlim = c(round(1/xlim(), 2),xlim()),
                               plotwidth ="8cm", spacing =1, addrow.overall=TRUE, print.I2 = TRUE, print.pval.I2=F, print.tau2 = F, print.pval.Q = F,
                               label.left = paste0("Favor\n", obj.meta()$vname[1]), label.right = paste0("Favor\n", obj.meta()$vname[2]), scientific.pval = F, big.mark =","
@@ -377,7 +408,8 @@ server <- function(input, output, session) {
                        forest(obj.meta(),  leftcols = c("studlab", "n.e","event.e", "n.c","event.c", "effect","ci"), 
                               leftlabs = c("Source", "Total","Event","Total","Event","HR","95% CI"), pooled.total= T, pooled.events = T, 
                               rightcols = F, lab.e = paste0("             ", obj.meta()$vname[1]), lab.c = paste0("             ", obj.meta()$vname[2]), lab.e.attach.to.col = "n.e", lab.c.attach.to.col = "n.c",
-                              fontsize=12, comb.fixed = FALSE, comb.random = TRUE, text.random = "Overall", col.diamond.random = "royalblue", col.diamond.lines = "black",
+                              fontsize=12, comb.fixed = ("fixed effect" %in% input$fixed_random), comb.random = ("random effects" %in% input$fixed_random),
+                              text.random = "Overall", col.diamond.random = "royalblue", col.diamond.lines = "black",
                               digits = 2, digits.pval =3, digits.I2 = 1, just.studlab="left", just.addcols.left= "right", just = "center", xlim = c(round(1/xlim(), 2),xlim()),
                               plotwidth ="8cm", spacing =1, addrow.overall=TRUE, print.I2 = TRUE, print.pval.I2=F, print.tau2 = F, print.pval.Q = F,
                               label.left = paste0("Favor\n", obj.meta()$vname[1]), label.right = paste0("Favor\n", obj.meta()$vname[2]), scientific.pval = F, big.mark =","
@@ -390,6 +422,92 @@ server <- function(input, output, session) {
       
       
     })
+  
+  output$funnel <- renderPlot({
+    mkfunnel(obj.meta(), input$fixed_random, level = 0.95, studlab = "studlab" %in% input$option_funnel, yaxis = input$ytype_funnel, 
+             contour = "contour" %in% input$option_funnel, legend.pos = "topright", backtransf = "backtransf" %in% input$option_funnel)
+  })
+  
+  
+  
+  output$downloadControls_funnel <- renderUI({
+    fluidRow(
+      column(4,
+             selectizeInput("funnel_file_ext", "File extension (dpi = 300)", 
+                            choices = c("jpg","pdf", "tiff", "svg", "emf"), multiple = F, 
+                            selected = "emf"
+             )
+      ),
+      column(4,
+             sliderInput("fig_width_funnel", "Width (in):",
+                         min = 5, max = 20, value = 8
+             )
+      ),
+      column(4,
+             sliderInput("fig_height_funnel", "Height (in):",
+                         min = 5, max = 20, value = 6
+             )
+      )
+    )
+  })
+  
+  output$downloadButton_funnel <- downloadHandler(
+    filename =  function() {
+      paste("funnel.", input$funnel_file_ext ,sep="")
+    },
+    # content is a function with argument file. content writes the plot to the device
+    content = function(file) {
+      withProgress(message = 'Download in progress',
+                   detail = 'This may take a while...', value = 0, {
+                     for (i in 1:15) {
+                       incProgress(1/15)
+                       Sys.sleep(0.01)
+                     }
+                     
+                     if (input$funnel_file_ext == "emf"){
+                       devEMF::emf(file, width = input$fig_width_funnel, height =input$fig_height_funnel, coordDPI = 100, emfPlus = F)
+                       mkfunnel(obj.meta(), input$fixed_random, level = 0.95, studlab = "studlab" %in% input$option_funnel, yaxis = input$ytype_funnel, contour = "contour" %in% input$option_funnel, 
+                                legend.pos = "topright", backtransf = "backtransf" %in% input$option_funnel)
+                       dev.off()
+                       
+                     } else if (input$funnel_file_ext == "jpg"){
+                       jpeg(file, width = input$fig_width_funnel, height =input$fig_height_funnel, units = "in", res = 600)
+                       mkfunnel(obj.meta(), input$fixed_random, level = 0.95, studlab = "studlab" %in% input$option_funnel, yaxis = input$ytype_funnel, contour = "contour" %in% input$option_funnel, 
+                                legend.pos = "topright", backtransf = "backtransf" %in% input$option_funnel)
+                       dev.off()
+                     } else if (input$funnel_file_ext == "tiff"){
+                       tiff(file, width = input$fig_width_funnel, height =input$fig_height_funnel, units = "in", res = 600, compression = "zip")
+                       mkfunnel(obj.meta(), input$fixed_random, level = 0.95, studlab = "studlab" %in% input$option_funnel, yaxis = input$ytype_funnel, contour = "contour" %in% input$option_funnel, 
+                                legend.pos = "topright", backtransf = "backtransf" %in% input$option_funnel)
+                       dev.off()
+                       
+                     } else if (input$funnel_file_ext == "pdf"){
+                       pdf(file, width = input$fig_width_funnel, height =input$fig_height_funnel)
+                       mkfunnel(obj.meta(), input$fixed_random, level = 0.95, studlab = "studlab" %in% input$option_funnel, yaxis = input$ytype_funnel, contour = "contour" %in% input$option_funnel, 
+                                legend.pos = "topright", backtransf = "backtransf" %in% input$option_funnel)
+                       dev.off()
+                       
+                     } else if (input$funnel_file_ext == "svg"){
+                       svglite::svglite(file, width = input$fig_width_funnel, height =input$fig_height_funnel)
+                       mkfunnel(obj.meta(), input$fixed_random, level = 0.95, studlab = "studlab" %in% input$option_funnel, yaxis = input$ytype_funnel, contour = "contour" %in% input$option_funnel, 
+                                legend.pos = "topright", backtransf = "backtransf" %in% input$option_funnel)
+                       dev.off()
+                       
+                     } 
+                     
+                   })
+      
+      
+    })
+  
+  
+  output$metaout <- renderPrint({
+    obj.meta()
+  })
+  
+  output$egger <- renderPrint({
+    metabias(obj.meta(), k.min = obj.meta()$k)
+  })
   
   ## KM
   
